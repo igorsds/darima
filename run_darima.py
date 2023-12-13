@@ -1,13 +1,25 @@
 #! /usr/local/bin/python3.7
 
+# modification of spark serializers in zip file
+# D:\spark-3.5.0\python\lib\pyspark.zip\pyspark\sql\pandas\serializers.py:224: FutureWarning: 
+# is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+#
+# --- FROM 
+#        from pandas.api.types import is_categorical_dtype
+#            if is_categorical_dtype(series.dtype):
+# --- TO
+#        from pandas.api.types import CategoricalDtype         
+#        if isinstance(series.dtype, CategoricalDtype):
+#            if series.name == "category":
+
 import findspark
-findspark.init("/usr/lib/spark-current")
+findspark.init()
 
 import pyspark
 # Set Executor Env
 conf = pyspark.SparkConf().setAppName("Spark DARIMA App").setExecutorEnv('ARROW_PRE_0_15_IPC_FORMAT', '1')
 spark = pyspark.sql.SparkSession.builder.config(conf=conf).getOrCreate()
-spark.sparkContext.addPyFile("darima.zip")
+#spark.sparkContext.addPyFile("darima.zip")
 
 import os, sys, time
 from datetime import timedelta
@@ -33,8 +45,8 @@ from rpy2.robjects import numpy2ri
 
 
 # Enable Arrow-based columnar data transfers
-spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "true")
+spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+spark.conf.set("spark.sql.execution.arrow.pyspark.fallback.enabled", "true")
 
 
 ##----------------------------------------------------------------------------------------
@@ -45,8 +57,8 @@ spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "true")
 #-----------------------------------------------------------------------------------------
 using_data = "real_hdfs" # ["simulated_pdf", "real_pdf", "real_hdfs"
 series_name = 'TOTAL'
-model_saved_file_name = 'result/darima_model_' + series_name + '_' + time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime()) + '.pkl'
-coef_saved_file_name = 'result/darima_coef_' + series_name + '_' + time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime()) + '.csv'
+model_saved_file_name = 'result/darima_model_' + series_name + '_' + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '.pkl'
+coef_saved_file_name = 'result/darima_coef_' + series_name + '_' + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '.csv'
 
 # Model settings
 #-----------------------------------------------------------------------------------------
@@ -63,9 +75,9 @@ h = 2879; level = 95
 
 # Settings for using real hdfs data
 #-----------------------------------------------------------------------------------------
-file_train_path = ['/user/student/xiaoqian-darima/darima/data/' + series_name + '_train.csv'] # HDFS file
-file_test_path = ['/user/student/xiaoqian-darima/darima/data/' + series_name + '_test.csv'] # HDFS file
-forec_saved_file_name = 'result/darima_forec_' + series_name + '_' + time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime()) + '.csv'
+file_train_path = ['data/' + series_name + '_train.csv'] # HDFS file
+file_test_path = ['data/' + series_name + '_test.csv'] # HDFS file
+forec_saved_file_name = 'result/darima_forec_' + series_name + '_' + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '.csv'
 
 usecols_x = ['time']
 
@@ -109,9 +121,11 @@ sample_size_per_partition.append(int(sample_size[file_no_i] / partition_num[file
 data_sdf_i = data_sdf_i.withColumn(
     "id",
     monotonically_increasing_id()+1)
+# typecasting to int
+data_sdf_i = data_sdf_i.withColumn("id",data_sdf_i['id'].cast('int'))
 
 # Add partition ID according to ID
-def partition_id(idvalue):
+def partition_id(idvalue: int):
     if ceil(idvalue/sample_size_per_partition[file_no_i]) <= partition_num[file_no_i]:
         return ceil(idvalue/sample_size_per_partition[file_no_i])
     else:
@@ -256,7 +270,7 @@ print("\nModel Summary:\n")
 print(out_time.to_string(index=False))
 
 print("\nDLSA Coefficients:\n")
-print(out_Theta.to_string(index=False))
+#print(out_Theta.to_string(index=False))
 
 print("\nForecasting scores:\n")
 print("mase, smape, msis\n")
